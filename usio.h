@@ -12,14 +12,19 @@ struct usio_io {
 	__u32 fd;
 };
 
-struct usio_ios {
-	__u32 count;
-	struct usio_io __user *__user *ios;
-};
-
 struct usio_event {
 	__u64 io;
 	__s64 res;
+};
+
+#ifndef __KERNEL__
+#undef __user
+#define __user
+#endif
+
+struct usio_ios {
+	__u32 count;
+	struct usio_io __user *__user *ios;
 };
 
 struct usio_events {
