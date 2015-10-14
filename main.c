@@ -259,7 +259,7 @@ static long usio_reclaim(struct usio_context *ctx,
 		return -EFAULT;
 
 	wait_event_interruptible(ctx->finished_wq,
-				usio_ctx_finished(ctx) < min_count);
+				usio_ctx_finished(ctx) >= min_count);
 
 	if (signal_pending(current))
 		return -EINTR;
