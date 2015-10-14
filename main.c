@@ -56,7 +56,8 @@ static void usio_end_io(struct bio *bio)
 	++ctx->finished_list_size;
 	list_move(&handle->link, &ctx->finished_list);
 	spin_unlock(&ctx->lock);
-	wake_up_interruptible(&ctx->finished_wq);
+
+	wake_up(&ctx->finished_wq);
 }
 
 static struct bio *usio_bio_create(struct usio_io *io,
@@ -64,14 +65,12 @@ static struct bio *usio_bio_create(struct usio_io *io,
 {
 	struct page **pages;
 	struct bio *bio;
-	int npages = 0;
+	__u64 last = io->data + io->bytes + PAGE_SIZE - 1;
+	int npages;
 	int offset, len;
 	int rc, i;
 
-	if (io->data & ~PAGE_MASK)
-		++npages;
-
-	npages += (io->bytes + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	npages = (last >> PAGE_SHIFT) - (io->data >> PAGE_SHIFT);
 	if (npages > BIO_MAX_PAGES)
 		return ERR_PTR(-EINVAL);
 
@@ -86,7 +85,7 @@ static struct bio *usio_bio_create(struct usio_io *io,
 		return ERR_PTR(-ENOMEM);
 	}
 
-	rc = get_user_pages_fast(io->data, npages,
+	rc = get_user_pages_fast(io->data & PAGE_MASK, npages,
 				(io->flags & REQ_WRITE) != REQ_WRITE, pages);
 	if (rc < npages) {
 		rc = -EFAULT;
@@ -266,6 +265,7 @@ static long usio_reclaim(struct usio_context *ctx,
 		return -EINTR;
 
 	INIT_LIST_HEAD(&splice);
+
 	spin_lock_irqsave(&ctx->lock, flags);
 	list_splice_init(&ctx->finished_list, &splice);
 	finished = ctx->finished_list_size;
@@ -295,7 +295,8 @@ static long usio_reclaim(struct usio_context *ctx,
 		list_splice_tail(&splice, &ctx->finished_list);
 		ctx->finished_list_size += finished - i;
 		spin_unlock_irqrestore(&ctx->lock, flags);
-		wake_up_interruptible(&ctx->finished_wq);
+
+		wake_up(&ctx->finished_wq);
 	}
 
 	return i ? i : rc;
@@ -317,12 +318,15 @@ static long usio_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		rc = usio_submit_all(ctx, (struct usio_ios __user *)arg);
 		break;
 	case USIO_RECLAIM:
+		pr_info("received USIO_RECLAIM request\n");
 		rc = usio_reclaim(ctx, (struct usio_events __user *)arg);
 		break;
 	default:
+		pr_info("received unknown request\n");
 		return -ENOTTY;
 	}
 
+	pr_info("return %d\n", rc);
 	return rc;
 }
 
@@ -350,13 +354,14 @@ static int usio_release(struct inode *inode, struct file *file)
 	struct usio_context *ctx = (struct usio_context *)file->private_data;
 	struct list_head *pos, *tmp;
 
-	wait_event(ctx->finished_wq, !list_empty(&ctx->running_list));
+	wait_event(ctx->finished_wq, list_empty(&ctx->running_list));
 	list_for_each_safe(pos, tmp, &ctx->finished_list) {
 		struct usio_io_handle *handle = list_entry(pos,
 					struct usio_io_handle, link);
 		kmem_cache_free(usio_io_handle_cachep, handle);
 	}
 	kfree(ctx);
+
 	return 0;
 }
 
