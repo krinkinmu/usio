@@ -133,7 +133,6 @@ static long usio_submit_one(struct usio_context *ctx,
 	struct inode *inode;
 	struct bio *bio;
 	unsigned blksize_mask;
-	unsigned long flags;
 
 	if (!filep || !filep->f_mapping)
 		return -EBADF;
@@ -171,9 +170,9 @@ static long usio_submit_one(struct usio_context *ctx,
 	handle->event.res = 0;
 	handle->bio = bio;
 
-	spin_lock_irqsave(&ctx->lock, flags);
+	spin_lock_irq(&ctx->lock);
 	list_add_tail(&handle->link, &ctx->running_list);
-	spin_unlock_irqrestore(&ctx->lock, flags);
+	spin_unlock_irq(&ctx->lock);
 
 	submit_bio(io->flags, bio);
 	fput(filep);
@@ -225,12 +224,11 @@ static long usio_submit_all(struct usio_context *ctx,
 
 static size_t usio_ctx_finished(struct usio_context *ctx)
 {
-	unsigned long flags;
 	size_t ret;
 
-	spin_lock_irqsave(&ctx->lock, flags);
+	spin_lock_irq(&ctx->lock);
 	ret = ctx->finished_list_size;
-	spin_unlock_irqrestore(&ctx->lock, flags);
+	spin_unlock_irq(&ctx->lock);
 
 	return ret;
 }
@@ -240,7 +238,6 @@ static long usio_reclaim(struct usio_context *ctx,
 {
 	struct usio_events copy;
 	struct usio_event __user *events;
-	unsigned long flags;
 	long finished;
 	long min_count;
 	long max_count;
@@ -266,11 +263,11 @@ static long usio_reclaim(struct usio_context *ctx,
 
 	INIT_LIST_HEAD(&splice);
 
-	spin_lock_irqsave(&ctx->lock, flags);
+	spin_lock_irq(&ctx->lock);
 	list_splice_init(&ctx->finished_list, &splice);
 	finished = ctx->finished_list_size;
 	ctx->finished_list_size = 0;
-	spin_unlock_irqrestore(&ctx->lock, flags);
+	spin_unlock_irq(&ctx->lock);
 
 	list_for_each_safe(pos, tmp, &splice) {
 		struct usio_io_handle *handle = list_entry(pos,
@@ -291,10 +288,10 @@ static long usio_reclaim(struct usio_context *ctx,
 	}
 
 	if (!list_empty(&splice)) {
-		spin_lock_irqsave(&ctx->lock, flags);
+		spin_lock_irq(&ctx->lock);
 		list_splice_tail(&splice, &ctx->finished_list);
 		ctx->finished_list_size += finished - i;
-		spin_unlock_irqrestore(&ctx->lock, flags);
+		spin_unlock_irq(&ctx->lock);
 
 		wake_up(&ctx->finished_wq);
 	}
