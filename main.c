@@ -315,15 +315,11 @@ static long usio_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		rc = usio_submit_all(ctx, (struct usio_ios __user *)arg);
 		break;
 	case USIO_RECLAIM:
-		pr_info("received USIO_RECLAIM request\n");
 		rc = usio_reclaim(ctx, (struct usio_events __user *)arg);
 		break;
 	default:
-		pr_info("received unknown request\n");
 		return -ENOTTY;
 	}
-
-	pr_info("return %d\n", rc);
 	return rc;
 }
 
