@@ -67,7 +67,15 @@ int main()
 		perror("reclaim failed");
 		fprintf(stderr, "USIO_RECLAIM failed with %d, goto out\n", i);
 		err = 1;
+		goto out;
 	}
+
+	for (i = 0; i != REQUESTS; ++i) {
+		if (!events[i].res)
+			continue;
+		fprintf(stderr, "IO failed with %ld\n", (long)events[i].res);
+	}
+
 out:
 	close(misc_fd);
 	close(block_fd);
