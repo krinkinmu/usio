@@ -47,15 +47,16 @@ static void usio_end_io(struct bio *bio)
 {
 	struct usio_io_handle *handle = bio->bi_private;
 	struct usio_context *ctx = handle->ctx;
+	unsigned long flags;
 
 	handle->event.res = bio->bi_error;
 	usio_bio_release_pages(bio);
 	bio_put(bio);
 
-	spin_lock(&ctx->lock);
+	spin_lock_irqsave(&ctx->lock, flags);
 	++ctx->finished_list_size;
 	list_move(&handle->link, &ctx->finished_list);
-	spin_unlock(&ctx->lock);
+	spin_unlock_irqrestore(&ctx->lock, flags);
 
 	wake_up(&ctx->finished_wq);
 }
