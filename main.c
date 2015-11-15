@@ -97,7 +97,7 @@ static struct bio *usio_bio_create(struct usio_io *io,
 	offset = io->data & ~PAGE_MASK;
 	len = io->bytes;
 	for (i = 0; i != npages; ++i) {
-		unsigned bytes = PAGE_SIZE - offset;
+		int bytes = PAGE_SIZE - offset;
 
 		if (bytes > len)
 			bytes = len;
